@@ -3,6 +3,10 @@ import SceneKit
 import AVFoundation
 import CoreLocation
 
+protocol ARControllerDelegate {
+  func viewController(controller: ViewController, tappedTarget: ARItem)
+}
+
 class ViewController: UIViewController {
   
   @IBOutlet weak var sceneView: SCNView!
@@ -20,6 +24,8 @@ class ViewController: UIViewController {
   let scene = SCNScene()
   let cameraNode = SCNNode()
   let targetNode = SCNNode(geometry: SCNBox(width: 1, height: 1, length: 1, chamferRadius: 0))
+  
+  var delegate: ARControllerDelegate?
   
   override func viewDidLoad() {
     super.viewDidLoad()
@@ -147,8 +153,49 @@ class ViewController: UIViewController {
   }
   
   func setupTarget() {
-    targetNode.name = "enemy"
-    self.target.itemNode = targetNode
+    
+    let scene = SCNScene(named: "art.scnassets/\(target.itemDescription).dae")
+    let enemy = scene?.rootNode.childNode(withName: target.itemDescription, recursively: true)
+    
+    if target.itemDescription == "dragon" {
+      enemy?.position = SCNVector3(x: 0, y: -20, z: 0)
+    } else {
+      enemy?.position = SCNVector3(x: 0, y: 0, z: 0)
+    }
+    
+    let node = SCNNode()
+    node.addChildNode(enemy!)
+    node.name = "enemy"
+    self.target.itemNode = node
+  }
+  
+  override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
+    let touch = touches.first!
+    let location = touch.location(in: sceneView)
+    
+    let hitResult = sceneView.hitTest(location, options: nil)
+    
+    let fireBall = SCNParticleSystem(named: "Fireball.scnp", inDirectory: nil)
+    
+    let emitterNode = SCNNode()
+    emitterNode.position = SCNVector3(x: 0, y: -5, z: 10)
+    emitterNode.addParticleSystem(fireBall!)
+    scene.rootNode.addChildNode(emitterNode)
+    
+    if hitResult.first != nil {
+      target.itemNode?.runAction(SCNAction.sequence([SCNAction.wait(duration: 0.5), SCNAction.removeFromParentNode(), SCNAction.hide()]))
+      
+      let sequence = SCNAction.sequence(
+        [SCNAction.move(to: target.itemNode!.position, duration: 0.5),
+         SCNAction.wait(duration: 3.5),
+         SCNAction.run({_ in
+          self.delegate?.viewController(controller: self, tappedTarget: self.target)
+         })])
+      //let moveAction = SCNAction.move(to: target.itemNode!.position, duration: 0.5)
+      emitterNode.runAction(sequence)
+    } else {
+      emitterNode.runAction(SCNAction.move(to: SCNVector3(x: 0, y: 0, z: -30), duration: 0.5))
+    }
   }
 }
 
